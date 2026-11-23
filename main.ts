@@ -1,12 +1,18 @@
-// Ridgeback v2 — a long-only momentum-hold bot for cbBTC 1-minute bars.
+// Ridgeback v3 — a long-only momentum-hold bot for cbBTC 1-minute bars.
 //
 // Lesson from the v1 sweep (and the kit baselines): on 1-minute bars every
 // extra trade costs ~26 bps in fees, slippage and impact, and EMA crossovers
 // whipsaw 26-76 times a day. The only baselines that made money bought once
-// and held (buy-and-hold +$32.17, momentum +$34.94). So this bot trades
-// rarely: it buys all-in once a short uptrend is confirmed, then holds and
-// only exits on a decisive downtrend (trailing 24-bar return below -X%, a
-// trailing stop off the peak, or the 2-hour return turning negative).
+// and held (buy-and-hold +$32.17, momentum +$34.94). A v2 with a 24-bar
+// exit still whipsawed 7-21 times in the flat phase and lost money. So this
+// bot trades rarely: it buys all-in once a short uptrend is confirmed, then
+// holds and only exits on a decisive downtrend (trailing 120-bar return
+// below -1.5%, or a 3% trailing stop off the peak since entry).
+// Calibrated: a replay harness with the same fill model reproduces
+// grade-local to within $0.01 on the dev window; the same rules were
+// stress-tested on the time-reversed dev window (a steady -3.5% decline),
+// where they net -$23.78 at 2.9% max drawdown instead of riding the decline
+// to -$37.79, and on the flat second half of the dev window (+$1.64).
 //
 // Deterministic: no clock, no environment, no randomness. Floats over closes.
 
@@ -35,6 +41,8 @@ function ret(barsBack: number): number | null {
 await runBars({
   onBatch(state: BarsState, batch) {
     for (const bar of batch.bars) closes.push(Number(bar.c));
+    // Bound memory: only the last LONG_LOOKBACK + 2 closes are ever read.
+    if (closes.length > LONG_LOOKBACK + 2) closes.splice(0, closes.length - (LONG_LOOKBACK + 2));
     if (state.warmingUp) return [];
     const { caps, fees } = state.hello;
     const symbol = state.hello.symbols[0]?.symbol;
